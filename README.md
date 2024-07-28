@@ -1,5 +1,7 @@
 # Baseball-Simulator
 
+![Baseball-Simulator](baseball_sim.jpg)
+
 ## Introduction
 
 Welcome to an exploration of a baseball simulation script written in Python! This script models the outcomes of baseball games using probability distributions for player performance. It comprises classes for players, teams, games, and a simulator to run multiple games. This article will break down the script step-by-step, providing insights into how it works and how you can use it to simulate baseball games.
