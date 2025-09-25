@@ -146,13 +146,40 @@ class Simulator:
         self.score = score
     
     def simulate(self, its=100):
+        return self.simulate_with_progress(its, show_progress=False)
+
+    def simulate_with_progress(self, its=100, show_progress=False):
+        """Run `its` games. If show_progress is True, display a simple progress indicator."""
         game_log = []
         wins = 0
-        for i in range(its):
-            game = Game(self.teams)
-            result = game.play_game()
-            wins += result['winner']
-            game_log.append(result)
+        if show_progress:
+            try:
+                from tqdm import trange
+                use_tqdm = True
+            except Exception:
+                use_tqdm = False
+
+            if use_tqdm:
+                for i in trange(its, desc='Simulating'):
+                    game = Game(self.teams)
+                    result = game.play_game()
+                    wins += result['winner']
+                    game_log.append(result)
+            else:
+                for i in range(its):
+                    game = Game(self.teams)
+                    result = game.play_game()
+                    wins += result['winner']
+                    game_log.append(result)
+                    pct = (i + 1) / its * 100
+                    print(f"Simulating: {i+1}/{its} ({pct:.1f}%)", end='\r', flush=True)
+                print()
+        else:
+            for i in range(its):
+                game = Game(self.teams)
+                result = game.play_game()
+                wins += result['winner']
+                game_log.append(result)
         print(f"The home team won {wins} out of {its}, for a winning percentage of {wins / its * 100}%!")
         return game_log
 
@@ -178,4 +205,6 @@ team2 = Team(players)
 simulator = Simulator([team1, team2])
 
 # Run the simulation for 100 games
-simulation_results = simulator.simulate(its=100)
+if __name__ == '__main__':
+    # When run as a script this will simulate 100 games using the example probabilities
+    simulation_results = simulator.simulate(its=100)
