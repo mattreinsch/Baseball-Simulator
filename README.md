@@ -256,3 +256,36 @@ simulator = Simulator([team1, team2])
 simulation_results = simulator.simulate(its=100)
 ```
 This script allows you to simulate a series of baseball games, track individual player statistics, and team performance over multiple games. Whether you're a baseball enthusiast or a programmer interested in simulations, this project offers a fascinating way to explore the intricacies of the sport through code.
+
+## Web UI
+
+A lightweight browser UI is included so you can run simulations without touching Python code.
+
+How to run
+
+1. (Recommended) Create and activate a virtual environment and install dependencies:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+2. Start the web server:
+
+```powershell
+py -3 web_app.py
+```
+
+3. Open your browser at http://localhost:8000
+
+What the UI does
+
+- Lets you choose the number of games, random seed, and Dirichlet concentration (player variability).
+- Optionally fetches team probabilities from Baseball-Reference (requires network + BeautifulSoup).
+- Shows results in tidy tables and charts and offers a CSV download.
+
+Troubleshooting
+
+- If the web UI fails to start, check that Python is on your PATH and that dependencies are installed.
+- If scraping fails due to SSL/proxy issues, run without "Use scrape" and the UI will use example probabilities.
