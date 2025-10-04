@@ -1,0 +1,206 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Baseball Simulator</title>
+    <style>
+      body { font-family: sans-serif; max-width: 1100px; margin: 2rem auto; }
+      input, select { padding: .25rem .5rem; margin: .25rem; }
+      .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem }
+      #out { background:#fff; padding:1rem; overflow:auto }
+      table { border-collapse: collapse; width:100%; margin-bottom:1rem }
+      th { background:#f0f0f0; cursor:pointer; }
+      th, td { padding:6px 8px; text-align:left; border:1px solid #ddd }
+      .controls { display:flex; gap:1rem; align-items:center }
+      .charts { display:flex; gap:1rem; margin-top:1rem }
+      .chart-box { flex:1 }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <h1>Baseball Simulator (browser)</h1>
+    <form id="form">
+      <div class="grid">
+        <div>
+          <label>Games: <input type="number" name="games" value="100" /></label><br/>
+          <label>Seed: <input type="number" name="seed" /></label><br/>
+          <label>Concentration: <input type="number" name="concentration" value="50" step="1"/></label><br/>
+          <label><input type="checkbox" name="use_scrape"/> Use scrape</label><br/>
+          <label>Year: <input type="number" name="year" value="2019"/></label>
+        </div>
+        <div>
+          <label>Team 1 name (optional): <input type="text" name="team1"/></label><br/>
+          <label>Team 2 name (optional): <input type="text" name="team2"/></label><br/>
+          <button type="submit">Run Simulation</button>
+        </div>
+      </div>
+    </form>
+
+    <h2>Results</h2>
+    <div id="results">
+      <div class="controls">
+        <div id="download"></div>
+        <div style="margin-left:auto">Sort players by: 
+          <select id="sortSelect">
+            <option value="team_player">Team / Player</option>
+            <option value="OBP">OBP (desc)</option>
+            <option value="AVE">AVE (desc)</option>
+            <option value="SLG">SLG (desc)</option>
+          </select>
+        </div>
+      </div>
+      <div id="out">No results yet</div>
+    </div>
+    <div class="charts">
+      <div class="chart-box"><canvas id="teamChart" height="200"></canvas></div>
+      <div class="chart-box"><canvas id="playerChart" height="200"></canvas></div>
+    </div>
+
+    <script>
+      const form = document.getElementById('form');
+      const out = document.getElementById('out');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        // convert some fields
+        data.games = parseInt(data.games || 100, 10);
+        if (data.seed) data.seed = parseInt(data.seed, 10);
+        data.concentration = parseFloat(data.concentration || 50);
+        data.use_scrape = !!data.use_scrape;
+        data.year = parseInt(data.year || 2019, 10);
+        out.textContent = 'Running... (may take a few seconds)';
+        try {
+          const res = await fetch('/simulate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+          const json = await res.json();
+          renderResult(json);
+        } catch (err) {
+          out.textContent = 'Error: ' + err;
+        }
+      });
+
+      function renderResult(json) {
+        if (!json) {
+          out.textContent = 'No data';
+          return;
+        }
+        if (json.error) {
+          out.innerHTML = `<pre>Error: ${escapeHtml(json.error)}\n${escapeHtml(json.detail || '')}</pre>`;
+          return;
+        }
+
+        const games = json.games || 0;
+        let html = `<p><strong>Games:</strong> ${games}</p>`;
+
+  // Team summary table
+        if (Array.isArray(json.team_summary)) {
+          html += '<h3>Team summary</h3>';
+          html += '<table border="1" cellpadding="4"><thead><tr><th>Team</th><th>Wins</th><th>Losses</th></tr></thead><tbody>';
+          for (const t of json.team_summary) {
+            html += `<tr><td>${escapeHtml(String(t.team))}</td><td>${escapeHtml(String(t.wins))}</td><td>${escapeHtml(String(t.losses))}</td></tr>`;
+          }
+          html += '</tbody></table>';
+        }
+
+        // Players table
+        if (Array.isArray(json.players)) {
+          html += '<h3>Players</h3>';
+          html += '<table id="playersTable" border="1" cellpadding="4"><thead><tr><th data-key="team">Team</th><th data-key="player">Player</th><th data-key="OBP">OBP</th><th data-key="AVE">AVE</th><th data-key="SLG">SLG</th></tr></thead><tbody>';
+          // sort players by team then player
+          const players = json.players.slice().sort((a,b) => (a.team - b.team) || (a.player - b.player));
+          for (const p of players) {
+            html += `<tr><td>${escapeHtml(String(p.team))}</td><td>${escapeHtml(String(p.player))}</td><td data-num="${p.OBP}">${formatNum(p.OBP)}</td><td data-num="${p.AVE}">${formatNum(p.AVE)}</td><td data-num="${p.SLG}">${formatNum(p.SLG)}</td></tr>`;
+          }
+          html += '</tbody></table>';
+        }
+
+        out.innerHTML = html;
+
+        // create CSV download
+        const csv = makeCSV(json);
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const dl = document.getElementById('download');
+  dl.innerHTML = `<p><a href="${url}" download="simulation_summary.csv">Download CSV summary</a></p>`;
+
+  // draw charts
+  try { drawCharts(json); } catch (e) { console.warn('chart draw failed', e); }
+      }
+
+      function formatNum(n) {
+        if (n == null) return '';
+        return Number(n).toFixed(3);
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      function makeCSV(json) {
+        const lines = [];
+        lines.push('type,team,player,OBP,AVE,SLG,wins,losses');
+        if (Array.isArray(json.team_summary)) {
+          for (const t of json.team_summary) {
+            lines.push([ 'team', t.team, '', '', '', '', t.wins, t.losses ].join(','));
+          }
+        }
+        if (Array.isArray(json.players)) {
+          for (const p of json.players) {
+            lines.push([ 'player', p.team, p.player, p.OBP, p.AVE, p.SLG, '', '' ].join(','));
+          }
+        }
+        return lines.join('\n');
+      }
+
+      // Sorting control
+      const sortSelect = document.getElementById('sortSelect');
+      sortSelect.addEventListener('change', () => {
+        const mode = sortSelect.value;
+        const table = document.getElementById('playersTable');
+        if (!table) return;
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        let compare;
+        if (mode === 'team_player') {
+          compare = (a,b) => (Number(a.cells[0].textContent) - Number(b.cells[0].textContent)) || (Number(a.cells[1].textContent) - Number(b.cells[1].textContent));
+        } else {
+          compare = (a,b) => Number(b.querySelector(`[data-num]` + '').getAttribute('data-num')) - Number(a.querySelector(`[data-num]`).getAttribute('data-num'));
+        }
+        // more robust: build based on key
+        if (mode === 'OBP' || mode === 'AVE' || mode === 'SLG') {
+          const idx = {OBP:2, AVE:3, SLG:4}[mode];
+          rows.sort((r1, r2) => Number(r2.cells[idx].getAttribute('data-num')) - Number(r1.cells[idx].getAttribute('data-num')));
+        } else {
+          rows.sort(compare);
+        }
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+        for (const r of rows) tbody.appendChild(r);
+      });
+
+      function drawCharts(json) {
+        // Team wins bar
+        const tLabels = json.team_summary.map(t => 'Team ' + t.team);
+        const tWins = json.team_summary.map(t => t.wins);
+        const teamCtx = document.getElementById('teamChart').getContext('2d');
+        if (window._teamChart) window._teamChart.destroy();
+        window._teamChart = new Chart(teamCtx, {
+          type: 'bar',
+          data: { labels: tLabels, datasets: [{ label: 'Wins', data: tWins, backgroundColor: ['#4e79a7','#f28e2b'] }] },
+          options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+
+        // Player OBP bar grouped by team: show each player's OBP as a point on a bar chart
+        const players = json.players.slice().sort((a,b) => (a.team - b.team) || (a.player - b.player));
+        const pLabels = players.map(p => `T${p.team}-P${p.player}`);
+        const pData = players.map(p => Number(p.OBP));
+        const colors = players.map(p => p.team === 0 ? '#59a14f' : '#e15759');
+        const pCtx = document.getElementById('playerChart').getContext('2d');
+        if (window._playerChart) window._playerChart.destroy();
+        window._playerChart = new Chart(pCtx, {
+          type: 'bar',
+          data: { labels: pLabels, datasets: [{ label: 'OBP', data: pData, backgroundColor: colors }] },
+          options: { responsive:true, scales: { y: { beginAtZero:true, max:1.0 } }, plugins: { legend:{display:false} } }
+        });
+      }
+    </script>
+  </body>
+</html>
